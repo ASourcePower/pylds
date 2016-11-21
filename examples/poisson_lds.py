@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from pybasicbayes.distributions import Regression
 from pybasicbayes.util.text import progprint_xrange
 from pypolyagamma.distributions import BernoulliRegression
-from pylds.models import LDS, DefaultPoissonLDS
+from pylds.models import LDS, DefaultPoissonLDS, DefaultLaplaceBernoulliLDS
 
 npr.seed(0)
 
@@ -33,8 +33,8 @@ truemodel = LDS(
 data, stateseq = truemodel.generate(T)
 
 # Fit with a Poisson LDS
-model = DefaultPoissonLDS(D_obs, D_latent)
-model.add_data(data, verbose=False)
+poisson_model = DefaultPoissonLDS(D_obs, D_latent)
+poisson_model.add_data(data, verbose=False)
 
 N_iters = 50
 def em_update(model):
@@ -42,18 +42,28 @@ def em_update(model):
     ll = model.log_likelihood()
     return ll
 
-lls = [em_update(model) for _ in progprint_xrange(N_iters)]
+poisson_lls = [em_update(poisson_model) for _ in progprint_xrange(N_iters)]
+
+# Fit with a Poisson LDS
+bernoulli_model = DefaultLaplaceBernoulliLDS(D_obs, D_latent)
+bernoulli_model.emission_distn.A = truemodel.emission_distn.A.copy()
+bernoulli_model.emission_distn.b = truemodel.emission_distn.b.copy()
+bernoulli_model.add_data(data, verbose=False)
+bernoulli_lls = [em_update(bernoulli_model) for _ in progprint_xrange(N_iters)]
 
 # Plot the log likelihood over iterations
 plt.figure(figsize=(10,6))
-plt.plot(lls,'-b')
+# plt.plot(poisson_lls, '-r', label="Poisson")
+plt.plot(bernoulli_lls, '-b', label="Bernoulli")
 plt.xlabel('iteration')
 plt.ylabel('log likelihood')
+plt.legend(loc="lower right")
 
 # Plot the smoothed observations
 fig = plt.figure(figsize=(10,10))
 N_subplots = min(D_obs, 6)
-smoothed_obs = model.states_list[0].smooth()
+# poisson_smoothed_obs = poisson_model.states_list[0].smooth()
+bernoulli_smoothed_obs = bernoulli_model.states_list[0].smooth()
 true_smoothed_obs = truemodel.states_list[0].smooth()
 
 ylims = (-0.1, 1.1)
@@ -68,7 +78,8 @@ for i,j in enumerate(n_to_plot):
 
     # Plot the inferred rate
     ax.plot([0], [0], 'ko', lw=2, label="observed data")
-    ax.plot(smoothed_obs[:,j], 'r', lw=2, label="poisson mean")
+    # ax.plot(poisson_smoothed_obs[:, j], 'r', lw=2, label="poisson mean")
+    ax.plot(bernoulli_smoothed_obs[:, j], 'r', lw=2, label="bernoulli mean")
     ax.plot(true_smoothed_obs[:,j], 'k', lw=2, label="true mean")
 
     if i == 0:
